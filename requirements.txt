@@ -1,0 +1,7 @@
+# Core (stdlib only on Windows — no extra install needed for basic features)
+
+# Windows file system access (required for owner info and file attributes)
+pywin32>=306; sys_platform == "win32"
+
+# PDF report generation (optional)
+reportlab>=4.0
