@@ -66,6 +66,8 @@ def extract_metadata(path: str) -> FileMetadata:
         path=str(p.resolve()),
         name=p.name,
         size=st.st_size,
+        # Windows: st_ctime = file creation time (correct for forensics)
+        # Linux/macOS: st_ctime = inode-change time (NOT creation time - document this)
         created=datetime.datetime.fromtimestamp(st.st_ctime),
         modified=datetime.datetime.fromtimestamp(st.st_mtime),
         accessed=datetime.datetime.fromtimestamp(st.st_atime),

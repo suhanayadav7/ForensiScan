@@ -131,3 +131,36 @@ def analyze_all(metas: list[FileMetadata], progress_cb=None) -> list[HiddenDataR
 
 def filter_suspicious(results: list[HiddenDataResult]) -> list[HiddenDataResult]:
     return [r for r in results if r.is_suspicious]
+
+
+def compute_risk_score(meta, sig_result=None, entropy_result=None) -> int:
+    """Combine forensic signals into a 0-100 risk score.
+
+    Weights:
+      Extension mismatch (sig)  : +35  -- major red flag
+      Hidden + System bits set  : +30
+      High entropy (> 7.2)      : +20  -- encrypted or packed
+      Double extension          : +25  -- e.g. document.txt.exe
+      Executable in temp dir    : +20
+      Risky extension           : +10
+    Maximum returned value is capped at 100.
+    """
+    from pathlib import Path
+    score = 0
+    if meta.is_hidden and meta.is_system:
+        score += 30
+    if sig_result and sig_result.mismatch:
+        score += 35
+    if meta.extension in _RISKY_EXT:
+        score += 10
+    if entropy_result and entropy_result.is_high_entropy:
+        score += 20
+    p = Path(meta.path)
+    if len(p.suffixes) >= 2 and p.suffixes[-1].lower() in _DOUBLE_EXT:
+        score += 25
+    lower = meta.path.lower()
+    for tmp in ('\\temp\\', '\\tmp\\', '\\appdata\\local\\temp\\'):
+        if tmp in lower and meta.extension in _RISKY_EXT:
+            score += 20
+            break
+    return min(score, 100)

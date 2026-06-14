@@ -62,3 +62,23 @@ def group_by_day(events: list[TimelineEvent]) -> dict[datetime.date, list[Timeli
     for e in events:
         groups.setdefault(e.timestamp.date(), []).append(e)
     return groups
+
+
+def find_timestamp_anomalies(metas) -> list[dict]:
+    """Return files where modified < created -- indicates timestamp tampering.
+
+    Under normal Windows operation a file cannot be modified before it was
+    created. When this condition is found it strongly suggests timestamps were
+    manipulated by an attacker or an anti-forensics tool.
+    """
+    anomalies = []
+    for m in metas:
+        if m.modified < m.created:
+            anomalies.append({
+                "path": m.path,
+                "created": m.created.strftime("%Y-%m-%d %H:%M:%S"),
+                "modified": m.modified.strftime("%Y-%m-%d %H:%M:%S"),
+                "delta": str(m.created - m.modified).split(".")[0],
+                "note": "MODIFIED before CREATED -- possible tampering",
+            })
+    return anomalies

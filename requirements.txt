@@ -1,7 +1,10 @@
-# Core (stdlib only on Windows — no extra install needed for basic features)
-
-# Windows file system access (required for owner info and file attributes)
+# Required on Windows for file owner info and NTFS ADS detection
 pywin32>=306; sys_platform == "win32"
 
-# PDF report generation (optional)
+# Required for PDF report export
 reportlab>=4.0
+
+# All other modules use Python stdlib only:
+#   hashlib, os, pathlib, ctypes, math, csv, datetime, platform, sys, html
+# No extra install needed for:
+#   metadata, hasher, signatures, hidden_data, timeline, entropy, reporter (CSV and HTML modes)

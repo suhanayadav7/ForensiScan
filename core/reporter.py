@@ -1,8 +1,10 @@
 """Report generation — CSV, HTML, and optional PDF (ReportLab) output."""
 
 import csv
+import sys
 import datetime
-import os
+import html as _html
+import platform as _platform
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +23,33 @@ try:
     HAS_REPORTLAB = True
 except ImportError:
     HAS_REPORTLAB = False
+
+TOOL_VERSION = '1.0.0'
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+def build_audit_block_html(
+    scan_start, scan_end, target, total_files, examiner, case_name
+) -> str:
+    duration = str(scan_end - scan_start).split('.')[0]
+    rows = [
+        ('Tool',          f'ForensiScan v{TOOL_VERSION}'),
+        ('Python',        sys.version.split()[0]),
+        ('Platform',      _platform.platform()),
+        ('Examiner',      examiner),
+        ('Case name',     case_name),
+        ('Scan target',   target),
+        ('Files scanned', str(total_files)),
+        ('Scan started',  scan_start.strftime('%Y-%m-%d %H:%M:%S')),
+        ('Scan ended',    scan_end.strftime('%Y-%m-%d %H:%M:%S')),
+        ('Duration',      duration),
+    ]
+    inner = ''.join(
+        f'<tr><td><b>{k}</b></td><td>{v}</td></tr>'
+        for k, v in rows
+    )
+    return '<h2>Audit Log — Chain of Custody</h2>' + f'<table>{inner}</table>'
 
 
 # ── CSV ───────────────────────────────────────────────────────────────────────
@@ -64,6 +93,15 @@ def export_timeline_csv(events: list[TimelineEvent], out_path: str) -> str:
         for e in events:
             w.writerow([e.timestamp, e.kind, e.path, e.size, e.extension,
                         e.is_hidden, e.is_system])
+    return out_path
+
+
+def export_entropy_csv(entropy_results, out_path: str) -> str:
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['Path', 'Entropy', 'HighEntropy', 'Note'])
+        for e in entropy_results:
+            w.writerow([e.path, e.entropy, e.is_high_entropy, e.note])
     return out_path
 
 
@@ -132,8 +170,20 @@ def export_html_report(
     examiner: str = "Unknown",
     case_name: str = "Untitled",
     target_path: str = "",
+    scan_start=None,
+    scan_end=None,
 ) -> str:
+    # Fix 2: sanitise all user-supplied strings before writing to HTML
+    examiner    = _html.escape(str(examiner))
+    case_name   = _html.escape(str(case_name))
+    target_path = _html.escape(str(target_path))
+
     sections: list[str] = []
+
+    # Feature 5: audit block as first section
+    if scan_start and scan_end:
+        sections.append(build_audit_block_html(
+            scan_start, scan_end, target_path, len(metas), examiner, case_name))
 
     # Summary
     mismatches  = [s for s in sigs if s.mismatch]
@@ -147,13 +197,19 @@ def export_html_report(
         f"Timeline events: <strong>{len(events)}</strong></p>"
     )
 
-    # Metadata table (first 500 rows to keep HTML manageable)
+    # Fix 1: Metadata table with truncation warning
+    cap = 500
+    if len(metas) > cap:
+        warn = (f' <span class="warn">WARNING: showing {cap} of {len(metas)}'
+                f' — export CSV for complete evidence</span>')
+    else:
+        warn = ''
     rows = ''.join(_tr([_fmt(m.path), _fmt(m.size), _fmt(m.created),
                         _fmt(m.modified), _fmt(m.is_hidden), _fmt(m.is_system),
                         _fmt(m.owner)])
-                   for m in metas[:500])
+                   for m in metas[:cap])
     sections.append(_TABLE_TMPL.format(
-        heading=f"File Metadata ({min(len(metas), 500)} of {len(metas)} files)",
+        heading=f"File Metadata ({min(len(metas), cap)} of {len(metas)} files){warn}",
         headers=_th(['Path', 'Size', 'Created', 'Modified', 'Hidden', 'System', 'Owner']),
         rows=rows,
     ))
@@ -169,11 +225,17 @@ def export_html_report(
             rows=rows,
         ))
 
-    # Hashes (first 200)
+    # Fix 1: Hashes with truncation warning
+    cap = 200
+    if len(hashes) > cap:
+        warn = (f' <span class="warn">WARNING: showing {cap} of {len(hashes)}'
+                f' — export CSV for complete evidence</span>')
+    else:
+        warn = ''
     rows = ''.join(_tr([_fmt(h.path), _fmt(h.md5), _fmt(h.sha256)])
-                   for h in hashes[:200])
+                   for h in hashes[:cap])
     sections.append(_TABLE_TMPL.format(
-        heading=f"Cryptographic Hashes ({min(len(hashes), 200)} of {len(hashes)})",
+        heading=f"Cryptographic Hashes ({min(len(hashes), cap)} of {len(hashes)}){warn}",
         headers=_th(['Path', 'MD5', 'SHA-256']),
         rows=rows,
     ))
@@ -191,11 +253,17 @@ def export_html_report(
             rows=''.join(rows_html),
         ))
 
-    # Timeline (first 1000)
+    # Fix 1: Timeline with truncation warning
+    cap = 1000
+    if len(events) > cap:
+        warn = (f' <span class="warn">WARNING: showing {cap} of {len(events)}'
+                f' — export CSV for complete evidence</span>')
+    else:
+        warn = ''
     rows = ''.join(_tr([_fmt(e.timestamp), _fmt(e.kind), _fmt(e.path)])
-                   for e in events[:1000])
+                   for e in events[:cap])
     sections.append(_TABLE_TMPL.format(
-        heading=f"Timeline ({min(len(events), 1000)} of {len(events)} events)",
+        heading=f"Timeline ({min(len(events), cap)} of {len(events)} events){warn}",
         headers=_th(['Timestamp', 'Event', 'Path']),
         rows=rows,
     ))
@@ -221,12 +289,19 @@ def export_pdf_report(
     metas: list[FileMetadata],
     hashes: list[FileHashes],
     sigs: list[SignatureResult],
+    hidden: list[HiddenDataResult] = None,
+    events: list[TimelineEvent] = None,
     examiner: str = "Unknown",
     case_name: str = "Untitled",
     target_path: str = "",
+    scan_start=None,
+    scan_end=None,
 ) -> str:
     if not HAS_REPORTLAB:
         raise RuntimeError("ReportLab is not installed. Run: pip install reportlab")
+
+    hidden = hidden or []
+    events = events or []
 
     styles = getSampleStyleSheet()
     doc    = SimpleDocTemplate(out_path, pagesize=A4)
@@ -242,12 +317,15 @@ def export_pdf_report(
 
     # Summary table
     mismatches = [s for s in sigs if s.mismatch]
+    suspicious = [h for h in hidden if h.is_suspicious]
     story.append(Paragraph("Summary", styles['Heading2']))
     summary_data = [
         ['Metric', 'Value'],
         ['Total files scanned', str(len(metas))],
         ['Signature mismatches', str(len(mismatches))],
+        ['Suspicious hidden items', str(len(suspicious))],
         ['Hash records', str(len(hashes))],
+        ['Timeline events', str(len(events))],
     ]
     t = Table(summary_data, colWidths=[200, 100])
     t.setStyle(TableStyle([
@@ -273,6 +351,49 @@ def export_pdf_report(
         t = Table(data, colWidths=[200, 60, 80, 160])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.red),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 20))
+
+    # Polish 2: Hidden data section
+    if suspicious:
+        story.append(Paragraph(f"Suspicious Items ({len(suspicious)})", styles['Heading2']))
+        data = [['Path', 'Suspicion Flags', 'ADS Streams']]
+        for r in suspicious[:200]:
+            flags = '; '.join(r.suspicion_flags)
+            ads   = '; '.join(f"{a.stream_name}({a.size}B)" for a in r.ads_streams)
+            data.append([
+                Paragraph(r.meta.path[-60:], styles['Normal']),
+                Paragraph(flags or '—', styles['Normal']),
+                Paragraph(ads or '—', styles['Normal']),
+            ])
+        t = Table(data, colWidths=[160, 180, 160])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkred),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 20))
+
+    # Polish 2: Timeline section (first 500 events)
+    if events:
+        story.append(Paragraph(
+            f"Timeline (first 500 of {len(events)} events)", styles['Heading2']))
+        data = [['Timestamp', 'Event', 'Path']]
+        for e in events[:500]:
+            data.append([
+                e.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                e.kind,
+                Paragraph(e.path[-70:], styles['Normal']),
+            ])
+        t = Table(data, colWidths=[120, 60, 320])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
             ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
             ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
             ('FONTSIZE', (0, 0), (-1, -1), 7),
