@@ -1,4 +1,4 @@
-"""Timeline builder — chronological ordering of file system events."""
+"""Builds a chronological event timeline from file metadata records."""
 
 import datetime
 from dataclasses import dataclass

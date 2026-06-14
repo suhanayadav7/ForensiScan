@@ -1,4 +1,8 @@
-"""Hidden data detection — NTFS ADS, hidden/system files, suspicious attributes."""
+"""NTFS Alternate Data Stream enumeration and suspicion heuristics.
+
+ADS detection calls the Windows FindFirstStreamW/FindNextStreamW API and returns
+empty results on non-Windows platforms.
+"""
 
 import os
 import ctypes
@@ -29,7 +33,7 @@ class HiddenDataResult:
         return bool(self.ads_streams) or bool(self.suspicion_flags)
 
 
-# ── NTFS ADS via Windows API ─────────────────────────────────────────────────
+# NTFS ADS detection
 
 class _WIN32_FIND_STREAM_DATA(ctypes.Structure):
     _fields_ = [
@@ -75,7 +79,8 @@ def enumerate_ads(path: str) -> list[AltDataStream]:
         return []
 
 
-# ── Suspicion heuristics ──────────────────────────────────────────────────────
+# Heuristic checks
+# --------------------
 
 _DOUBLE_EXT = {'.exe', '.dll', '.scr', '.bat', '.cmd', '.vbs', '.ps1', '.com'}
 _RISKY_EXT  = {'.exe', '.dll', '.scr', '.bat', '.cmd', '.vbs', '.ps1',

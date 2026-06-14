@@ -1,4 +1,4 @@
-"""Cryptographic hashing engine — MD5, SHA-1, SHA-256 with duplicate detection."""
+"""MD5, SHA-1 and SHA-256 hashing with duplicate detection and hashset matching."""
 
 import hashlib
 from pathlib import Path

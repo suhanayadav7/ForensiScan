@@ -1,4 +1,9 @@
-"""Shannon entropy analysis -- detects encrypted/packed/compressed files."""
+"""Shannon entropy analysis for detecting encrypted or packed files.
+
+Entropy is measured on a 0.0-8.0 scale. Files scoring above 7.2 are flagged as
+likely encrypted, compressed, or packed by a packer such as UPX -- a common
+technique used to conceal malicious payloads.
+"""
 
 import math
 from dataclasses import dataclass

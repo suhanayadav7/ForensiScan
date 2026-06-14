@@ -1,4 +1,7 @@
-"""Report generation — CSV, HTML, and optional PDF (ReportLab) output."""
+"""Report generation: CSV bundle, HTML report, and optional PDF.
+
+Supports CSV (per-module), styled HTML with audit log, and ReportLab PDF.
+"""
 
 import csv
 import sys
@@ -27,7 +30,7 @@ except ImportError:
 TOOL_VERSION = '1.0.0'
 
 
-# ── Audit log ─────────────────────────────────────────────────────────────────
+# Audit log
 
 def build_audit_block_html(
     scan_start, scan_end, target, total_files, examiner, case_name
@@ -52,7 +55,8 @@ def build_audit_block_html(
     return '<h2>Audit Log — Chain of Custody</h2>' + f'<table>{inner}</table>'
 
 
-# ── CSV ───────────────────────────────────────────────────────────────────────
+# CSV exports
+# --------------------
 
 def export_metadata_csv(metas: list[FileMetadata], out_path: str) -> str:
     with open(out_path, 'w', newline='', encoding='utf-8') as f:
@@ -105,7 +109,8 @@ def export_entropy_csv(entropy_results, out_path: str) -> str:
     return out_path
 
 
-# ── HTML ──────────────────────────────────────────────────────────────────────
+# HTML report
+# ================================
 
 _HTML_TEMPLATE = """\
 <!DOCTYPE html>
@@ -173,14 +178,14 @@ def export_html_report(
     scan_start=None,
     scan_end=None,
 ) -> str:
-    # Fix 2: sanitise all user-supplied strings before writing to HTML
+    # Escape user input to prevent broken HTML output
     examiner    = _html.escape(str(examiner))
     case_name   = _html.escape(str(case_name))
     target_path = _html.escape(str(target_path))
 
     sections: list[str] = []
 
-    # Feature 5: audit block as first section
+    # Chain-of-custody audit log goes at the top of the report
     if scan_start and scan_end:
         sections.append(build_audit_block_html(
             scan_start, scan_end, target_path, len(metas), examiner, case_name))
@@ -197,7 +202,7 @@ def export_html_report(
         f"Timeline events: <strong>{len(events)}</strong></p>"
     )
 
-    # Fix 1: Metadata table with truncation warning
+    # Large result sets are capped - warn the examiner if data is truncated
     cap = 500
     if len(metas) > cap:
         warn = (f' <span class="warn">WARNING: showing {cap} of {len(metas)}'
@@ -225,7 +230,7 @@ def export_html_report(
             rows=rows,
         ))
 
-    # Fix 1: Hashes with truncation warning
+    # Same truncation cap applies to the hashes section
     cap = 200
     if len(hashes) > cap:
         warn = (f' <span class="warn">WARNING: showing {cap} of {len(hashes)}'
@@ -253,7 +258,7 @@ def export_html_report(
             rows=''.join(rows_html),
         ))
 
-    # Fix 1: Timeline with truncation warning
+    # Timeline is capped at 1000 events in the HTML view
     cap = 1000
     if len(events) > cap:
         warn = (f' <span class="warn">WARNING: showing {cap} of {len(events)}'
@@ -282,7 +287,7 @@ def export_html_report(
     return out_path
 
 
-# ── PDF (ReportLab optional) ──────────────────────────────────────────────────
+# PDF report (requires ReportLab)
 
 def export_pdf_report(
     out_path: str,
@@ -358,7 +363,7 @@ def export_pdf_report(
         story.append(t)
         story.append(Spacer(1, 20))
 
-    # Polish 2: Hidden data section
+    # Hidden and suspicious items section
     if suspicious:
         story.append(Paragraph(f"Suspicious Items ({len(suspicious)})", styles['Heading2']))
         data = [['Path', 'Suspicion Flags', 'ADS Streams']]
@@ -380,7 +385,7 @@ def export_pdf_report(
         story.append(t)
         story.append(Spacer(1, 20))
 
-    # Polish 2: Timeline section (first 500 events)
+    # Timeline section - capped at 500 events in the PDF
     if events:
         story.append(Paragraph(
             f"Timeline (first 500 of {len(events)} events)", styles['Heading2']))

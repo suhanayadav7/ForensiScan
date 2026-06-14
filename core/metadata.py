@@ -1,4 +1,10 @@
-"""File metadata extraction — MAC timestamps, attributes, ownership."""
+"""Extracts forensic file metadata from Windows file system entries.
+
+Collects MAC timestamps (Modified, Accessed, Created), file size, owner information,
+and attribute flags (hidden, system, read-only). On Windows, pywin32 is used for
+accurate owner resolution and attribute retrieval. On other platforms a best-effort
+fallback is used, with reduced accuracy noted in the UI.
+"""
 
 import os
 import datetime

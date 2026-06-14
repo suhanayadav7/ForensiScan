@@ -1,4 +1,9 @@
-"""File signature analysis — compare magic bytes against declared extension."""
+"""Magic byte signature analysis.
+
+Reads the first 512 bytes of each file and compares against a database of known file
+signatures. Files whose declared extension does not match their actual format are
+flagged as mismatches.
+"""
 
 from pathlib import Path
 from dataclasses import dataclass
