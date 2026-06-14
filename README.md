@@ -1,4 +1,4 @@
-# ForensiScan — Windows File Analysis Tool
+# ForensiScan — Windows File Analysis Tool for Digital Forensics
 
 > A lightweight desktop application for digital forensics — automates file metadata extraction, signature verification, cryptographic hashing, hidden data detection, and timeline reconstruction.
 
